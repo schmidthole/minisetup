@@ -1,0 +1,89 @@
+#+TITLE: Minisetup
+
+Minimalist setup/scaffolding/skeleton framework for Python applications.
+
+* Background
+
+I set up a lot of small self-contained applications that need to run on remote
+machines. While things like [[https://github.com/pypa/setuptools][Setuptools]] are excellent and essentially the
+de-facto standard these days, it is sometimes nice to have a bare-bones
+solution with minimal boilerplate.
+
+Minisetup is an opinionated self contained setup script that can initialize a
+Python project with an install/uninstall script and configure it as a systemd
+service or command line application. Everything is contained in a single bash
+script that can be comprehended in a few minutes. Once a project skeleton is
+created, it is easy to add remove functionality based on requirements.
+
+* Installation
+
+Clone this repo and simply copy the ~minisetup~ script to somewhere in your
+~PATH~, i.e.
+
+#+BEGIN_SRC sh
+$> cp minisetup /usr/local/bin/minisetup
+#+END_SRC
+
+* Initialization
+
+#+BEGIN_SRC sh
+$> minisetup myproject [TYPE]
+#+END_SRC
+
+*Project Types:*
+
+The following arguments can be supplied for ~TYPE~ (default is ~cli~):
+
+| ~cli~     | Command line application |
+| ~service~ | systemd service          |
+| ~timer~   | systemd timer service    |
+
+* Usage
+
+Once you have initialized a project, the following actions are available:
+
+** Install
+
+Install for development (i.e. install all test/dev dependencies):
+
+#+BEGIN_SRC sh
+$> ./install.sh dev
+#+END_SRC
+
+Install for production:
+
+#+BEGIN_SRC sh
+$> ./install.sh
+#+END_SRC
+
+** Uninstall
+
+#+BEGIN_SRC sh
+$> ./uninstall.sh
+#+END_SRC
+
+** Linting
+
+#+BEGIN_SRC sh
+$> flake8
+#+END_SRC
+
+** Code Formatting
+
+#+BEGIN_SRC sh
+$> black .
+#+END_SRC
+
+** Testing
+
+#+BEGIN_SRC sh
+$> pytest
+#+END_SRC
+
+* Development
+
+Minisetup is linted using ~shellcheck~
+
+#+BEGIN_SRC sh
+$> shellcheck minisetup
+#+END_SRC

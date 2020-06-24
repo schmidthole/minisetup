@@ -1,0 +1,312 @@
+#!/bin/bash
+
+###############################################################################
+#
+# Minisetup
+#
+# Author: Taylor Schmidt
+#
+# Minimal initialization for Python projects. This script creates a skeleton
+# Python project supporting the following options:
+#  - CLI application
+#  - systemd service
+#  - systemd timer service
+#
+# Usage:
+#
+#     ./minisetup [PROJECT_NAME] [TYPE (default = cli)]
+#
+# Types:
+#   - cli
+#   - service
+#   - timer
+#
+###############################################################################
+
+# grab the project name
+if [[ $# -ne 1 ]]; then
+    echo "error: must supply project name"
+    exit 2
+fi
+
+PROJECT=$1
+echo "creating new project: $PROJECT"
+
+# grab the project type or default to cli
+# available options are:
+# - cli: command line interface
+# - service: systemd service
+# - timer: systemd timer
+TYPE=cli
+if [[ $# -gt 1 ]]; then
+    case "$2" in
+	"service")
+	    TYPE=service
+	    ;;
+	"timer")
+	    TYPE=timer
+	    ;;
+    esac
+fi
+
+###############################################################################
+#
+# General/shared setup actions
+#
+###############################################################################
+
+# setup the gitignore
+echo "- .gitignore"
+cat > ./.gitignore <<EOF
+# system files
+.DS_Store
+*.swp
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*\$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.pytest_cache/
+cover/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# archives
+*.pickle
+*.tar.*
+EOF
+
+# flake8 config
+echo "- .flake8"
+cat > .flake8 <<EOF
+[flake8]
+ignore =
+    E203
+    E241
+    W391
+    W503
+exclude =
+    .git,
+    __pycache__,
+max-complexity = 10
+max-line-length=100
+EOF
+
+# requirements files
+echo "- requirements.txt"
+touch requirements.txt
+
+echo "- dev-requirements.txt"
+touch dev-requirements.txt
+
+echo "- test-requirements.txt"
+cat > test-requirements.txt <<EOF
+flake8
+black
+pytest
+EOF
+
+# script entry
+echo "- $PROJECT.py"
+touch "$PROJECT.py"
+
+# install file
+echo "- install.sh"
+cat > install.sh <<EOF
+#!/bin/bash
+
+INSTALL_DIR="/opt/$PROJECT/"
+
+if [[ $1 == "dev" ]]; then
+   pip3 install --upgrade -r dev-requirements.txt
+   pip3 install --upgrade -r test-requirements.txt
+   exit 0
+fi
+
+pip3 install --upgrade -r requirements.txt
+
+mkdir -p \$INSTALL_DIR
+
+cp $PROJECT.py \$INSTALL_DIR
+cp -r $PROJECT/ \$INSTALL_DIR
+
+EOF
+
+chmod +x install.sh
+
+# uninstall file
+echo "- uninstall.sh"
+cat > uninstall.sh <<EOF
+#!/bin/bash
+
+rm -r $INSTALL_DIR
+
+EOF
+
+chmod +x uninstall.sh
+
+echo "- $PROJECT/"
+mkdir -p "$PROJECT"
+
+echo "  - __init__.py"
+touch "$PROJECT/__init__.py"
+
+echo "- tests/"
+mkdir -p tests
+
+echo "  - __init__.py"
+touch tests/__init__.py
+
+echo "  - test_$PROJECT.py"
+touch tests/test_"$PROJECT".py
+
+###############################################################################
+#
+# Service specific actions
+#
+###############################################################################
+
+if [[ $TYPE == "service" ]]; then
+    echo "- systemd/"
+    mkdir -p systemd
+
+    echo "  - $PROJECT.service"
+    cat > systemd/"$PROJECT".service <<EOF
+[Unit]
+Description=$PROJECT
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/$PROJECT/$PROJECT.py
+Restart=always
+
+[Install]
+WantedBy=network-online.target
+EOF
+
+    { echo "cp systemd/$PROJECT.service /etc/systemd/system"
+      echo "systemctl daemon-reload"
+      echo "systemctl enable $PROJECT"
+      echo "systemctl start $PROJECT"
+    }  >> install.sh
+
+    { echo "systemctl stop $PROJECT"
+      echo "rm /etc/systemd/system/$PROJECT.service"
+    } >> uninstall.sh
+fi
+
+###############################################################################
+#
+# Timer specific actions
+#
+###############################################################################
+
+if [[ $TYPE == "timer" ]]; then
+    echo "- systemd/"
+    mkdir -p systemd
+
+    echo "  - $PROJECT.service"
+    cat > systemd/"$PROJECT".service <<EOF
+[Unit]
+Description=$PROJECT
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/$PROJECT/$PROJECT.py
+Type=oneshot
+WorkingDirectory=/opt/$PROJECT
+EOF
+
+    echo "  - $PROJECT.timer"
+    cat > systemd/"$PROJECT".timer <<EOF
+[Unit]
+Description=$PROJECT
+
+[Timer]
+OnCalendar=Mon..Fri 1:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+WantedBy=network-online.target
+EOF
+
+    { echo "cp systemd/$PROJECT.service systemd/$PROJECT.timer /etc/systemd/system"
+      echo "systemctl daemon-reload"
+      echo "systemctl enable $PROJECT.timer"
+      echo "systemctl start $PROJECT.timer"
+    } >> install.sh
+
+    { echo "systemctl stop $PROJECT.timer"
+      echo "rm /etc/systemd/system/$PROJECT.service"
+      echo "rm /etc/systemd/system/$PROJECT.timer"
+    } >> uninstall.sh
+fi
+
+###############################################################################
+#
+# CLI specific actions
+#
+###############################################################################
+
+if [[ $TYPE == "cli" ]]; then
+    echo "- cli.sh"
+    cat > /opt/"$PROJECT"/cli.sh <<EOF
+#!/bin/bash
+
+python3 /opt/$PROJECT/$PROJECT.py $#
+EOF
+    chmod +x cli.sh
+
+    { echo "ln -s /opt/$PROJECT/cli.sh /usr/local/bin/$PROJECT"
+      echo "chmod +x /usr/local/bin/$PROJECT"
+    } >> install.sh
+
+    echo "rm /usr/local/bin/$PROJECT" >> uninstall.sh
+fi
+
+echo "minisetup complete"
